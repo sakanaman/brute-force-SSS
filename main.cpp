@@ -51,15 +51,15 @@ struct Sphere
 };
 Sphere spheres[] = {
     //Scene: radius, position, emission, color, material
-    // Sphere(1e5, Vec(1e5 + 1, 40.8, 81.6), Vec(), Vec(.75, .25, .25), DIFF),   //Left
-    // Sphere(1e5, Vec(-1e5 + 99, 40.8, 81.6), Vec(), Vec(.25, .25, .75), DIFF), //Rght
-    // Sphere(1e5, Vec(50, 40.8, 1e5), Vec(), Vec(.75, .75, .75), DIFF),         //Back
-    // Sphere(1e5, Vec(50, 40.8, -1e5 + 170), Vec(), Vec(), DIFF),               //Frnt
-    // Sphere(1e5, Vec(50, 1e5, 81.6), Vec(), Vec(.75, .75, .75), DIFF),         //Botm
-    // Sphere(1e5, Vec(50, -1e5 + 81.6, 81.6), Vec(), Vec(.75, .75, .75), DIFF), //Top
-    //Sphere(16.5, Vec(27, 16.5, 47), Vec(), Vec(1, 1, 1) * .999, DIFF),        //Mirr
+    Sphere(1e5, Vec(1e5 + 1, 40.8, 81.6), Vec(), Vec(.75, .25, .25), DIFF),   //Left
+    Sphere(1e5, Vec(-1e5 + 99, 40.8, 81.6), Vec(), Vec(.25, .25, .75), DIFF), //Rght
+    Sphere(1e5, Vec(50, 40.8, 1e5), Vec(), Vec(.75, .75, .75), DIFF),         //Back
+    Sphere(1e5, Vec(50, 40.8, -1e5 + 170), Vec(), Vec(), DIFF),               //Frnt
+    Sphere(1e5, Vec(50, 1e5, 81.6), Vec(), Vec(.75, .75, .75), DIFF),         //Botm
+    Sphere(1e5, Vec(50, -1e5 + 81.6, 81.6), Vec(), Vec(.75, .75, .75), DIFF), //Top
+    // Sphere(16.5, Vec(27, 16.5, 47), Vec(), Vec(1, 1, 1) * .999, DIFF),        //Mirr
     Sphere(16.5, Vec(50, 42, 78), Vec(), Vec(1, 1, 1) * .999, VOL),        //Glas
-    Sphere(6, Vec(50, 65, 78), Vec(12, 12, 12), Vec(), DIFF)     //Lite
+    Sphere(600, Vec(50,681.6-.27,81.6), Vec(12, 12, 12), Vec(), DIFF)     //Lite
 };
 inline double clamp(double x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 inline int toInt(double x) { return int(pow(clamp(x), 1 / 2.2) * 255 + .5); }
@@ -147,10 +147,10 @@ Vec henyey_greenstein_sample(double g, double u, double v)
 
 
 
-Vec Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
-               Ray& scatter_Ray, bool& is_scatter)
+void Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
+               Ray& scatter_Ray, bool& is_scatter, Vec* pdf_throughput, Vec* f_throughput, const int now_channnel)
 {
-    int channel = Min((int)(erand48(Xi)*3), 2);
+    int channel = now_channnel;
 
     // distance sampling
     double dist = -log(1 - erand48(Xi))/sigma_t[channel];
@@ -171,33 +171,38 @@ Vec Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
         scatter_Ray = Ray(scattering_pos, scattering_dir);
         scatter_Ray.in_medium = true;
         is_scatter = true;
+
+        Vec transmit = Tr(dist);
+        Vec pdf = sigma_t.mult(transmit);
+        Vec f_sss = sigma_s.mult(transmit);
+
+        *pdf_throughput = pdf_throughput->mult(pdf);
+        *f_throughput = f_throughput->mult(f_sss);
     }
     else
     {
+        Vec transmit = Tr(tMax);
+        Vec pdf = transmit;
+        Vec f_sss = transmit;
         is_scatter = false;
+
+        *pdf_throughput = pdf_throughput->mult(pdf);
+        *f_throughput = f_throughput->mult(f_sss);
     }
-
-    Vec transmit = sampleMedium ? Tr(dist) : Tr(tMax);
-
-    Vec density = sampleMedium ? sigma_t.mult(transmit) : transmit;
-
-    double pdf = (density[0] + density[1] + density[2])/3.0;
-
-    if(pdf == 0) pdf = 1.0;
-
-    return sampleMedium ? transmit.mult(sigma_s) * (1.0/pdf) : transmit * (1.0/pdf);
 }
 
 
 
 Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
 {
-    Vec throughput(1.0, 1.0, 1.0);
+    Vec pdf_throughput(1.0, 1.0, 1.0);
+    Vec f_throughput(1.0, 1.0, 1.0);
     Vec result(0, 0, 0);
     Ray trace_ray = r;
     trace_ray.in_medium = false; //note:最初は媒質外
     double Pr = 1.0;
 
+    int now_channel = Min((int)(erand48(Xi)*3), 2);
 
     for(int bounds = 0;;bounds++)
     {
@@ -215,19 +220,20 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
             if(spheres[id].refl != VOL)
             {
                 printf("%f\n", (trace_ray.o - spheres[6].p).length());
+                break;
             }     
 
             Ray scatterRay(trace_ray.o, trace_ray.d);
             double tMax = t;
             bool is_scatter = false;
-            Vec weight = Vol_Sample(trace_ray, Xi, t, scatterRay, is_scatter);
+            Vol_Sample(trace_ray, Xi, t, scatterRay, is_scatter, 
+                        &pdf_throughput, &f_throughput, now_channel);
             
             //散乱する
             if(is_scatter)
             {
                 trace_ray = scatterRay;
                 trace_ray.in_medium = true;
-                throughput = throughput.mult(weight);
 
                 continue;
             }
@@ -235,7 +241,6 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
             //散乱しない
             trace_ray = Ray(trace_ray.o + trace_ray.d * t, trace_ray.d);
             trace_ray.in_medium = false;
-            throughput = throughput.mult(weight);
 
             continue;
         }
@@ -253,12 +258,13 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
 
             if(obj.e.x > 0)
             {
-                result = throughput.mult(obj.e);
+                double pdf = (pdf_throughput.x + pdf_throughput.y + pdf_throughput.z) * (1.0/3.0);
+                result = f_throughput.mult(obj.e) * (1.0/pdf);
                 break;
             }
 
             if(bounds > 5 && erand48(Xi) >= Pr) break;
-            throughput = throughput * (1.0/Pr);
+            pdf_throughput = pdf_throughput * Pr;
             Pr *= 0.98;
 
             if(obj.refl == DIFF) //拡散反射
@@ -267,9 +273,11 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
                 Vec w = nl, u = ((fabs(w.x) > .1 ? Vec(0, 1) : Vec(1)) % w).norm(), v = w % u;
                 Vec d = (u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrt(1 - r2)).norm();
 
+                double costheta = abs(d.dot(w));
+
                 trace_ray = Ray(x, d);
                 trace_ray.in_medium = false; //もちろん媒質の外
-                throughput = throughput.mult(f);
+                f_throughput = f_throughput.mult(f);
 
                 continue; //次のターンへ
             }
@@ -287,17 +295,17 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
                 if(spheres[invol_id].refl != VOL)
                 {
                     printf("%f\n", (trace_ray.o - spheres[6].p).length());
+                    break;
                 }     
 
 
                 double tMax = invol_t;
                 Ray scatterRay(x, r.d);
                 bool is_scatter = false;
-                Vec weight = Vol_Sample(involRay, Xi, tMax, scatterRay, is_scatter);
+                Vol_Sample(involRay, Xi, tMax, scatterRay, is_scatter, &pdf_throughput, &f_throughput, now_channel);
 
                 if(is_scatter)//散乱する
                 {
-                    throughput = throughput.mult(weight);
                     trace_ray = scatterRay;
                     trace_ray.in_medium = true; //もちろん媒質内部
 
@@ -307,7 +315,6 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
                 //散乱しない場合
                 trace_ray = Ray(involRay.o + involRay.d*invol_t, involRay.d);
                 trace_ray.in_medium = false;//次の始点は媒質表面→媒質外とする
-                throughput = throughput.mult(weight); 
 
                 continue; //次のターン
             }
