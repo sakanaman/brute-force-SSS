@@ -41,7 +41,7 @@ struct Sphere
     double intersect(const Ray &r) const
     {                     // returns distance, 0 if nohit
         Vec op = p - r.o; // Solve t^2*d.d + 2*t*(o-p).d + (o-p).(o-p)-R^2 = 0
-        double t, eps = 1e-4, b = op.dot(r.d), det = b * b - op.dot(op) + rad * rad;
+        double t, eps = 1e-8, b = op.dot(r.d), det = b * b - op.dot(op) + rad * rad;
         if (det < 0)
             return 0;
         else
@@ -51,15 +51,15 @@ struct Sphere
 };
 Sphere spheres[] = {
     //Scene: radius, position, emission, color, material
-    Sphere(1e5, Vec(1e5 + 1, 40.8, 81.6), Vec(), Vec(.75, .25, .25), DIFF),   //Left
-    Sphere(1e5, Vec(-1e5 + 99, 40.8, 81.6), Vec(), Vec(.25, .25, .75), DIFF), //Rght
-    Sphere(1e5, Vec(50, 40.8, 1e5), Vec(), Vec(.75, .75, .75), DIFF),         //Back
-    Sphere(1e5, Vec(50, 40.8, -1e5 + 170), Vec(), Vec(), DIFF),               //Frnt
-    Sphere(1e5, Vec(50, 1e5, 81.6), Vec(), Vec(.75, .75, .75), DIFF),         //Botm
-    Sphere(1e5, Vec(50, -1e5 + 81.6, 81.6), Vec(), Vec(.75, .75, .75), DIFF), //Top
+    // Sphere(1e5, Vec(1e5 + 1, 40.8, 81.6), Vec(), Vec(.75, .25, .25), DIFF),   //Left
+    // Sphere(1e5, Vec(-1e5 + 99, 40.8, 81.6), Vec(), Vec(.25, .25, .75), DIFF), //Rght
+    // Sphere(1e5, Vec(50, 40.8, 1e5), Vec(), Vec(.75, .75, .75), DIFF),         //Back
+    // Sphere(1e5, Vec(50, 40.8, -1e5 + 170), Vec(), Vec(), DIFF),               //Frnt
+    // Sphere(1e5, Vec(50, 1e5, 81.6), Vec(), Vec(.75, .75, .75), DIFF),         //Botm
+    // Sphere(1e5, Vec(50, -1e5 + 81.6, 81.6), Vec(), Vec(.75, .75, .75), DIFF), //Top
     //Sphere(16.5, Vec(27, 16.5, 47), Vec(), Vec(1, 1, 1) * .999, DIFF),        //Mirr
     Sphere(16.5, Vec(50, 42, 78), Vec(), Vec(1, 1, 1) * .999, VOL),        //Glas
-    Sphere(600, Vec(50, 681.6 - .27, 81.6), Vec(12, 12, 12), Vec(), DIFF)     //Lite
+    Sphere(6, Vec(50, 65, 78), Vec(12, 12, 12), Vec(), DIFF)     //Lite
 };
 inline double clamp(double x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 inline int toInt(double x) { return int(pow(clamp(x), 1 / 2.2) * 255 + .5); }
@@ -155,7 +155,7 @@ Vec Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
     // distance sampling
     double dist = -log(1 - erand48(Xi))/sigma_t[channel];
 
-    bool sampleMedium = (dist < tMax);
+    bool sampleMedium = (dist < tMax - 1e-6);
 
     if(sampleMedium)
     {
@@ -171,6 +171,10 @@ Vec Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
         scatter_Ray = Ray(scattering_pos, scattering_dir);
         scatter_Ray.in_medium = true;
         is_scatter = true;
+    }
+    else
+    {
+        is_scatter = false;
     }
 
     Vec transmit = sampleMedium ? Tr(dist) : Tr(tMax);
@@ -207,6 +211,11 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
                 printf("[Caution]: Unhit inside volume");
                 break;
             }
+
+            if(spheres[id].refl != VOL)
+            {
+                printf("%f\n", (trace_ray.o - spheres[6].p).length());
+            }     
 
             Ray scatterRay(trace_ray.o, trace_ray.d);
             double tMax = t;
@@ -275,6 +284,11 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
                     printf("[Caution]:  [Caution]: Unhit inside volume"); //当たんなかったらバグ
                     break;
                 }
+                if(spheres[invol_id].refl != VOL)
+                {
+                    printf("%f\n", (trace_ray.o - spheres[6].p).length());
+                }     
+
 
                 double tMax = invol_t;
                 Ray scatterRay(x, r.d);
