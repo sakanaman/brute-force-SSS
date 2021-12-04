@@ -259,6 +259,14 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
             if(obj.e.x > 0)
             {
                 double pdf = (pdf_throughput.x + pdf_throughput.y + pdf_throughput.z) * (1.0/3.0);
+                if(std::isinf(pdf))
+                {
+                    break;
+                }
+                if(std::isinf(f_throughput.x) | std::isinf(f_throughput.x) | std::isinf(f_throughput.x))
+                {
+                    break;
+                }
                 result = f_throughput.mult(obj.e) * (1.0/pdf);
                 break;
             }
