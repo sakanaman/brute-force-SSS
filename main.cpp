@@ -1,6 +1,7 @@
 #include <math.h>   // smallpt, a Path Tracer by Kevin Beason, 2008
 #include <stdlib.h> // Make : g++ -O3 -fopenmp smallpt.cpp -o smallpt
 #include <stdio.h>  //        Remove "-fopenmp" for g++ version < 4.2
+#include <limits>
 struct Vec
 {                   // Usage: time ./smallpt 5000 && xv image.ppm
     double x, y, z; // position, also color (r,g,b)
@@ -51,15 +52,16 @@ struct Sphere
 };
 Sphere spheres[] = {
     //Scene: radius, position, emission, color, material
-    Sphere(1e5, Vec(1e5 + 1, 40.8, 81.6), Vec(), Vec(.75, .25, .25), DIFF),   //Left
-    Sphere(1e5, Vec(-1e5 + 99, 40.8, 81.6), Vec(), Vec(.25, .25, .75), DIFF), //Rght
-    Sphere(1e5, Vec(50, 40.8, 1e5), Vec(), Vec(.75, .75, .75), DIFF),         //Back
-    Sphere(1e5, Vec(50, 40.8, -1e5 + 170), Vec(), Vec(), DIFF),               //Frnt
-    Sphere(1e5, Vec(50, 1e5, 81.6), Vec(), Vec(.75, .75, .75), DIFF),         //Botm
-    Sphere(1e5, Vec(50, -1e5 + 81.6, 81.6), Vec(), Vec(.75, .75, .75), DIFF), //Top
+    // Sphere(1e5, Vec(1e5 + 1, 40.8, 81.6), Vec(), Vec(.75, .25, .25), DIFF),   //Left
+    // Sphere(1e5, Vec(-1e5 + 99, 40.8, 81.6), Vec(), Vec(.25, .25, .75), DIFF), //Rght
+    // Sphere(1e5, Vec(50, 40.8, 1e5), Vec(), Vec(.75, .75, .75), DIFF),         //Back
+    // Sphere(1e5, Vec(50, 40.8, -1e5 + 170), Vec(), Vec(), DIFF),               //Frnt
+    // Sphere(1e5, Vec(50, 1e5, 81.6), Vec(), Vec(.75, .75, .75), DIFF),         //Botm
+    // Sphere(1e5, Vec(50, -1e5 + 81.6, 81.6), Vec(), Vec(.75, .75, .75), DIFF), //Top
     // Sphere(16.5, Vec(27, 16.5, 47), Vec(), Vec(1, 1, 1) * .999, DIFF),        //Mirr
     Sphere(16.5, Vec(50, 42, 78), Vec(), Vec(1, 1, 1) * .999, VOL),        //Glas
-    Sphere(600, Vec(50,681.6-.27,81.6), Vec(12, 12, 12), Vec(), DIFF)     //Lite
+    // Sphere(600, Vec(50,681.6-.27,81.6), Vec(12, 12, 12), Vec(), DIFF)     //Lite
+    Sphere(60, Vec(50, 200, 78), Vec(12, 12, 12), Vec(), DIFF) //Lite
 };
 inline double clamp(double x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 inline int toInt(double x) { return int(pow(clamp(x), 1 / 2.2) * 255 + .5); }
@@ -114,8 +116,8 @@ Vec local2world(const Vec& local, const Vec& x, const Vec& y, const Vec& z)
 
 // implementation
 
-const Vec sigma_s(0.16, 4.0, 0.24);
-const Vec sigma_a(0.008, 0.008, 0.008);
+const Vec sigma_s(0.05, 0.99, 0.5);
+const Vec sigma_a(0.001, 0.001, 0.001);
 const Vec sigma_t = sigma_s + sigma_a;
 double g = 0.1;
 
@@ -155,7 +157,7 @@ void Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
     // distance sampling
     double dist = -log(1 - erand48(Xi))/sigma_t[channel];
 
-    bool sampleMedium = (dist < tMax - 1e-6);
+    bool sampleMedium = (1e-6 < dist) && (dist < tMax - 1e-6);
 
     if(sampleMedium)
     {
@@ -228,6 +230,14 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
             bool is_scatter = false;
             Vol_Sample(trace_ray, Xi, t, scatterRay, is_scatter, 
                         &pdf_throughput, &f_throughput, now_channel);
+
+
+            if(std::isinf(pdf_throughput.x) || std::isinf(pdf_throughput.y) || std::isinf(pdf_throughput.z))
+            {
+                printf("pdf overflow\n");
+                break;
+            }
+
             
             //散乱する
             if(is_scatter)
@@ -259,14 +269,6 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
             if(obj.e.x > 0)
             {
                 double pdf = (pdf_throughput.x + pdf_throughput.y + pdf_throughput.z) * (1.0/3.0);
-                if(std::isinf(pdf))
-                {
-                    break;
-                }
-                if(std::isinf(f_throughput.x) | std::isinf(f_throughput.x) | std::isinf(f_throughput.x))
-                {
-                    break;
-                }
                 result = f_throughput.mult(obj.e) * (1.0/pdf);
                 break;
             }
@@ -312,6 +314,11 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
                 bool is_scatter = false;
                 Vol_Sample(involRay, Xi, tMax, scatterRay, is_scatter, &pdf_throughput, &f_throughput, now_channel);
 
+                if(std::isinf(pdf_throughput.x) || std::isinf(pdf_throughput.y) || std::isinf(pdf_throughput.z))
+                {
+                    printf("pdf overflow\n");
+                    break;
+                }
                 if(is_scatter)//散乱する
                 {
                     trace_ray = scatterRay;
