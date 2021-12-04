@@ -269,6 +269,10 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
             if(obj.e.x > 0)
             {
                 double pdf = (pdf_throughput.x + pdf_throughput.y + pdf_throughput.z) * (1.0/3.0);
+                if(pdf < 1e-8)
+                {
+                    break;
+                }
                 result = f_throughput.mult(obj.e) * (1.0/pdf);
                 break;
             }
@@ -366,5 +370,7 @@ int main(int argc, char *argv[])
     FILE *f = fopen("image.ppm", "w"); // Write image to PPM file.
     fprintf(f, "P3\n%d %d\n%d\n", w, h, 255);
     for (int i = 0; i < w * h; i++)
+    {
         fprintf(f, "%d %d %d ", toInt(c[i].x), toInt(c[i].y), toInt(c[i].z));
+    }
 }
