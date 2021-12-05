@@ -154,10 +154,10 @@ void albedo2sigma(const Vec& albedo, const Vec& scattering_dist, Vec* sigma_t, V
     for(int i = 0; i < 3; ++i)
     {
         alpha[i] = 1.0f - exp(albedo[i] * (-5.09406f + albedo[i] * (2.61188f - albedo[i] * 4.31805f)));
-        s[i] = 1.9f - albedo[i] + 3.5f * sqrt(albedo[i] - 0.8f);
+        s[i] = 1.9f - albedo[i] + 3.5f * (albedo[i] - 0.8f)*(albedo[i] - 0.8f);
 
-        (*sigma_t)[i] = 1.0f / fmaxf(scattering_dist[i] * albedo[i], 1e-16f);
-        (*sigma_s)[i] = (*sigma_t)[i] * albedo[i];
+        (*sigma_t)[i] = 1.0f / fmaxf(scattering_dist[i] * s[i], 1e-16f);
+        (*sigma_s)[i] = (*sigma_t)[i] * alpha[i];
     }
 }
 
@@ -378,6 +378,12 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
 
 int main(int argc, char *argv[])
 {
+    Vec albedo{0.99, 0.99, 0.99};
+    Vec scatter_dist{6.0, 1.0, 2.0};
+    Vec sigma_t, sigma_s;
+    albedo2sigma(albedo, scatter_dist, &sigma_t, &sigma_s);
+    printf("sigma_t = %f, %f, %f", sigma_t.x, sigma_t.y, sigma_t.z);
+    printf("sigma_s = %f, %f, %f", sigma_s.x, sigma_s.y, sigma_s.z);
     int w = 512, h = 512, samps = argc == 2 ? atoi(argv[1]) / 4 : 1; // # samples
     Ray cam(Vec(50, 52, 240.6), Vec(0, -0.042612, -1).norm());        // cam pos, dir
     Vec cx = Vec(w * .5135 / h), cy = (cx % cam.d).norm() * .5135, r, *c = new Vec[w * h];
