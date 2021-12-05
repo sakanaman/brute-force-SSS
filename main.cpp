@@ -116,13 +116,13 @@ Vec local2world(const Vec& local, const Vec& x, const Vec& y, const Vec& z)
 
 // implementation
 
-const Vec sigma_s(0.05, 0.99, 0.5);
-const Vec sigma_a(0.001, 0.001, 0.001);
-const Vec sigma_t = sigma_s + sigma_a;
-double g = 0.1;
+// const Vec sigma_s(0.05, 0.99, 0.5);
+// const Vec sigma_a(0.001, 0.001, 0.001);
+// const Vec sigma_t = sigma_s + sigma_a;
+// double g = 0.1;
 
 
-Vec Tr(double distance)
+Vec Tr(const Vec& sigma_t, double distance)
 {
     Vec inside = sigma_t * distance * (-1); // exp(-sigma_t * dist)
     return Exp(inside);
@@ -147,11 +147,27 @@ Vec henyey_greenstein_sample(double g, double u, double v)
             cosTheta};
 }
 
+void albedo2sigma(const Vec& albedo, const Vec& scattering_dist, Vec* sigma_t, Vec* sigma_s)
+{
+    Vec alpha;
+    Vec s;
+    for(int i = 0; i < 3; ++i)
+    {
+        alpha[i] = 1.0f - exp(albedo[i] * (-5.09406f + albedo[i] * (2.61188f - albedo[i] * 4.31805f)));
+        s[i] = 1.9f - albedo[i] + 3.5f * (albedo[i] - 0.8f)*(albedo[i] - 0.8f);
 
+        (*sigma_t)[i] = 1.0f / fmaxf(scattering_dist[i] * albedo[i], 1e-16f);
+        (*sigma_s)[i] = (*sigma_t)[i] * alpha[i];
+    }
+}
 
 void Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
-               Ray& scatter_Ray, bool& is_scatter, Vec* pdf_throughput, Vec* f_throughput, const int now_channnel)
+               Ray& scatter_Ray, bool& is_scatter, Vec* pdf_throughput, Vec* f_throughput, const int now_channnel,
+               const Vec& albedo, const Vec& scatter_dist, double g)
 {
+    Vec sigma_t,sigma_s;
+    albedo2sigma(albedo, scatter_dist, &sigma_t, &sigma_s);
+
     int channel = now_channnel;
 
     // distance sampling
@@ -174,7 +190,7 @@ void Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
         scatter_Ray.in_medium = true;
         is_scatter = true;
 
-        Vec transmit = Tr(dist);
+        Vec transmit = Tr(sigma_t, dist);
         Vec pdf = sigma_t.mult(transmit);
         Vec f_sss = sigma_s.mult(transmit);
 
@@ -183,7 +199,7 @@ void Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
     }
     else
     {
-        Vec transmit = Tr(tMax);
+        Vec transmit = Tr(sigma_t, tMax);
         Vec pdf = transmit;
         Vec f_sss = transmit;
         is_scatter = false;
@@ -197,6 +213,9 @@ void Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
 
 Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
 {
+    double g = 0.1;
+    Vec albedo{0.99, 0.99, 0.99};
+    Vec scatter_dist{6.0, 1.0, 2.0};
     Vec pdf_throughput(1.0, 1.0, 1.0);
     Vec f_throughput(1.0, 1.0, 1.0);
     Vec result(0, 0, 0);
@@ -229,7 +248,8 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
             double tMax = t;
             bool is_scatter = false;
             Vol_Sample(trace_ray, Xi, t, scatterRay, is_scatter, 
-                        &pdf_throughput, &f_throughput, now_channel);
+                        &pdf_throughput, &f_throughput, now_channel,
+                        albedo, scatter_dist, g);
 
 
             if(std::isinf(pdf_throughput.x) || std::isinf(pdf_throughput.y) || std::isinf(pdf_throughput.z))
@@ -316,7 +336,8 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
                 double tMax = invol_t;
                 Ray scatterRay(x, r.d);
                 bool is_scatter = false;
-                Vol_Sample(involRay, Xi, tMax, scatterRay, is_scatter, &pdf_throughput, &f_throughput, now_channel);
+                Vol_Sample(involRay, Xi, tMax, scatterRay, is_scatter, &pdf_throughput, &f_throughput, now_channel,
+                            albedo, scatter_dist, g);
 
                 if(std::isinf(pdf_throughput.x) || std::isinf(pdf_throughput.y) || std::isinf(pdf_throughput.z))
                 {
@@ -345,7 +366,7 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
 
 int main(int argc, char *argv[])
 {
-    int w = 1024, h = 768, samps = argc == 2 ? atoi(argv[1]) / 4 : 1; // # samples
+    int w = 512, h = 512, samps = argc == 2 ? atoi(argv[1]) / 4 : 1; // # samples
     Ray cam(Vec(50, 52, 295.6), Vec(0, -0.042612, -1).norm());        // cam pos, dir
     Vec cx = Vec(w * .5135 / h), cy = (cx % cam.d).norm() * .5135, r, *c = new Vec[w * h];
 #pragma omp parallel for schedule(dynamic, 1) private(r) // OpenMP
