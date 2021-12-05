@@ -115,13 +115,13 @@ Vec local2world(const Vec& local, const Vec& x, const Vec& y, const Vec& z)
 
 // implementation
 
-const Vec sigma_s(0.05, 0.99, 0.5);
-const Vec sigma_a(0.001, 0.001, 0.001);
-const Vec sigma_t = sigma_s + sigma_a;
-double g = 0.1;
+// const Vec sigma_s(0.05, 0.99, 0.5);
+// const Vec sigma_a(0.001, 0.001, 0.001);
+// const Vec sigma_t = sigma_s + sigma_a;
+// double g = 0.1;
 
 
-Vec Tr(double distance)
+Vec Tr(const Vec& sigma_t, double distance)
 {
     Vec inside = sigma_t * distance * (-1); // exp(-sigma_t * dist)
     return Exp(inside);
@@ -146,11 +146,27 @@ Vec henyey_greenstein_sample(double g, double u, double v)
             cosTheta};
 }
 
+void albedo2sigma(const Vec& albedo, const Vec& scattering_dist, Vec* sigma_t, Vec* sigma_s)
+{
+    Vec alpha;
+    Vec s;
+    for(int i = 0; i < 3; ++i)
+    {
+        alpha[i] = 1.0f - exp(albedo[i] * (-5.09406f + albedo[i] * (2.61188f - albedo[i] * 4.31805f)));
+        s[i] = 1.9f - albedo[i] + 3.5f * sqrt(albedo[i] - 0.8f);
+
+        (*sigma_t)[i] = 1.0f / fmaxf(scattering_dist[i] * albedo[i], 1e-16f);
+        (*sigma_s)[i] = (*sigma_t)[i] * albedo[i];
+    }
+}
+
 
 
 Vec Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
-               Ray& scatter_Ray, bool& is_scatter)
+               Ray& scatter_Ray, bool& is_scatter, const Vec& albedo, const Vec& scatter_dist, const double g)
 {
+    Vec sigma_t, sigma_s;
+    albedo2sigma(albedo, scatter_dist, &sigma_t, &sigma_s);
 
     int channel = Min((int)(erand48(Xi)*3), 2);
 
@@ -174,7 +190,7 @@ Vec Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
         scatter_Ray.in_medium = true;
         is_scatter = true;
 
-        Vec transmit = Tr(dist);
+        Vec transmit = Tr(sigma_t, dist);
         Vec pdf = sigma_t.mult(transmit);
         Vec f_sss = sigma_s.mult(transmit);
 
@@ -187,7 +203,7 @@ Vec Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
     }
     else
     {
-        Vec transmit = Tr(tMax);
+        Vec transmit = Tr(sigma_t, tMax);
         Vec pdf = transmit;
         Vec f_sss = transmit;
         is_scatter = false;
@@ -205,6 +221,9 @@ Vec Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
 
 Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
 {
+    Vec albedo = {0.99, 0.99, 0.99};
+    Vec scatter_dist{6.0, 1.0, 2.0};
+    double g = 0.1;
     Vec throughput(1.0, 1.0, 1.0);
     Vec result(0, 0, 0);
     Ray trace_ray = r;
@@ -234,7 +253,7 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
             Ray scatterRay(trace_ray.o, trace_ray.d);
             double tMax = t;
             bool is_scatter = false;
-            Vec weight = Vol_Sample(trace_ray, Xi, t, scatterRay, is_scatter);
+            Vec weight = Vol_Sample(trace_ray, Xi, t, scatterRay, is_scatter, albedo, scatter_dist, g);
             
             //散乱する
             if(is_scatter)
@@ -308,7 +327,7 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
                 double tMax = invol_t;
                 Ray scatterRay(x, r.d);
                 bool is_scatter = false;
-                Vec weight = Vol_Sample(involRay, Xi, tMax, scatterRay, is_scatter);
+                Vec weight = Vol_Sample(involRay, Xi, tMax, scatterRay, is_scatter, albedo, scatter_dist, g);
 
                 if(is_scatter)//散乱する
                 {
