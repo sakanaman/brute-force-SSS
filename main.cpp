@@ -153,10 +153,10 @@ void albedo2sigma(const Vec& albedo, const Vec& scattering_dist, Vec* sigma_t, V
     for(int i = 0; i < 3; ++i)
     {
         alpha[i] = 1.0f - exp(albedo[i] * (-5.09406f + albedo[i] * (2.61188f - albedo[i] * 4.31805f)));
-        s[i] = 1.9f - albedo[i] + 3.5f * sqrt(albedo[i] - 0.8f);
+        s[i] = 1.9f - albedo[i] + 3.5f * (albedo[i] - 0.8f) * (albedo[i] - 0.8f);
 
-        (*sigma_t)[i] = 1.0f / fmaxf(scattering_dist[i] * albedo[i], 1e-16f);
-        (*sigma_s)[i] = (*sigma_t)[i] * albedo[i];
+        (*sigma_t)[i] = 1.0f / fmaxf(scattering_dist[i] * s[i], 1e-16f);
+        (*sigma_s)[i] = (*sigma_t)[i] * alpha[i];
     }
 }
 
