@@ -51,15 +51,16 @@ struct Sphere
 };
 Sphere spheres[] = {
     //Scene: radius, position, emission, color, material
-    Sphere(1e5, Vec(1e5 + 1, 40.8, 81.6), Vec(), Vec(.75, .25, .25), DIFF),   //Left
-    Sphere(1e5, Vec(-1e5 + 99, 40.8, 81.6), Vec(), Vec(.25, .25, .75), DIFF), //Rght
-    Sphere(1e5, Vec(50, 40.8, 1e5), Vec(), Vec(.75, .75, .75), DIFF),         //Back
-    Sphere(1e5, Vec(50, 40.8, -1e5 + 170), Vec(), Vec(), DIFF),               //Frnt
-    Sphere(1e5, Vec(50, 1e5, 81.6), Vec(), Vec(.75, .75, .75), DIFF),         //Botm
-    Sphere(1e5, Vec(50, -1e5 + 81.6, 81.6), Vec(), Vec(.75, .75, .75), DIFF), //Top
+    // Sphere(1e5, Vec(1e5 + 1, 40.8, 81.6), Vec(), Vec(.75, .25, .25), DIFF),   //Left
+    // Sphere(1e5, Vec(-1e5 + 99, 40.8, 81.6), Vec(), Vec(.25, .25, .75), DIFF), //Rght
+    // Sphere(1e5, Vec(50, 40.8, 1e5), Vec(), Vec(.75, .75, .75), DIFF),         //Back
+    // Sphere(1e5, Vec(50, 40.8, -1e5 + 170), Vec(), Vec(), DIFF),               //Frnt
+    // Sphere(1e5, Vec(50, 1e5, 81.6), Vec(), Vec(.75, .75, .75), DIFF),         //Botm
+    // Sphere(1e5, Vec(50, -1e5 + 81.6, 81.6), Vec(), Vec(.75, .75, .75), DIFF), //Top
     // Sphere(16.5, Vec(27, 16.5, 47), Vec(), Vec(1, 1, 1) * .999, DIFF),        //Mirr
     Sphere(16.5, Vec(50, 42, 78), Vec(), Vec(1, 1, 1) * .999, VOL),        //Glas
-    Sphere(600, Vec(50,681.6-.27,81.6), Vec(12, 12, 12), Vec(), DIFF)     //Lite
+    // Sphere(600, Vec(50,681.6-.27,81.6), Vec(12, 12, 12), Vec(), DIFF)     //Lite
+    Sphere(60, Vec(50, 200, 78), Vec(12, 12, 12), Vec(), DIFF) //Lite
 };
 inline double clamp(double x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
 inline int toInt(double x) { return int(pow(clamp(x), 1 / 2.2) * 255 + .5); }
@@ -114,8 +115,8 @@ Vec local2world(const Vec& local, const Vec& x, const Vec& y, const Vec& z)
 
 // implementation
 
-const Vec sigma_s(0.16, 4.0, 0.24);
-const Vec sigma_a(0.008, 0.008, 0.008);
+const Vec sigma_s(0.05, 0.99, 0.5);
+const Vec sigma_a(0.001, 0.001, 0.001);
 const Vec sigma_t = sigma_s + sigma_a;
 double g = 0.1;
 
@@ -150,6 +151,7 @@ Vec henyey_greenstein_sample(double g, double u, double v)
 Vec Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
                Ray& scatter_Ray, bool& is_scatter)
 {
+
     int channel = Min((int)(erand48(Xi)*3), 2);
 
         // distance sampling
@@ -177,6 +179,10 @@ Vec Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
         Vec f_sss = sigma_s.mult(transmit);
 
         double pdf_balance = (pdf[0] + pdf[1] + pdf[2]) / 3.0;
+        if(pdf_balance == 0)
+        {
+            pdf_balance = 1.0;
+        }
         return f_sss * (1.0/pdf_balance);
     }
     else
@@ -187,6 +193,10 @@ Vec Vol_Sample(const Ray& ray, unsigned short *Xi, const double tMax,
         is_scatter = false;
 
         double pdf_balance = (pdf[0] + pdf[1] + pdf[2]) / 3.0;
+        if(pdf_balance == 0)
+        {
+            pdf_balance = 1.0;
+        }
         return f_sss * (1.0/pdf_balance);
     }
 }
@@ -324,8 +334,8 @@ Vec radience_vol(const Ray &r, int depth, unsigned short *Xi)
 
 int main(int argc, char *argv[])
 {
-    int w = 1024, h = 768, samps = argc == 2 ? atoi(argv[1]) / 4 : 1; // # samples
-    Ray cam(Vec(50, 52, 295.6), Vec(0, -0.042612, -1).norm());        // cam pos, dir
+    int w = 512, h = 512, samps = argc == 2 ? atoi(argv[1]) / 4 : 1; // # samples
+    Ray cam(Vec(50, 52, 240.6), Vec(0, -0.042612, -1).norm());        // cam pos, dir
     Vec cx = Vec(w * .5135 / h), cy = (cx % cam.d).norm() * .5135, r, *c = new Vec[w * h];
 #pragma omp parallel for schedule(dynamic, 1) private(r) // OpenMP
     for (int y = 0; y < h; y++)
